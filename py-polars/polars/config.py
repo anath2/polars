@@ -142,6 +142,275 @@ class ConfigParameters(TypedDict, total=False):
     set_expr_depth_warning: int
 
 
+class DisplayConfigNumericParameters(TypedDict, total=False):
+    """Parameters supported by the polars DisplayConfigNumeric."""
+
+    decimal_separator: str | None
+    thousands_separator: str | bool | None
+    float_precision: int | None
+    fmt_float: FloatFmt | None
+    trim_decimal_zeros: bool | None
+    
+    set_decimal_separator: str | None
+    set_thousands_separator: str | bool | None
+    set_float_precision: int | None
+    set_fmt_float: FloatFmt | None
+    set_trim_decimal_zeros: bool | None
+
+
+class DisplayConfigTableParameters(TypedDict, total=False):
+    """Parameters supported by the polars DisplayConfigTable."""
+    pass
+
+
+class DisplayNumericConfig:
+    """Nested config for displaying numeric values."""
+
+    def __init__(self):
+        pass
+
+    @classmethod
+    def set_decimal_separator(cls, separator: str | None = None) -> type[Config]:
+        """
+        Set the decimal separator character.
+
+        Parameters
+        ----------
+        separator : str, bool
+            Character to use as the decimal separator.
+            Set to ``None`` to revert to the default (".").
+
+        See Also
+        --------
+        set_thousands_separator : Set the thousands grouping separator character.
+
+        Examples
+        --------
+        >>> df = pl.DataFrame({"v": [9876.54321, 1010101.0, -123456.78]})
+        >>> with pl.Config(
+        ...     tbl_cell_numeric_alignment="RIGHT",
+        ...     thousands_separator=".",
+        ...     decimal_separator=",",
+        ...     float_precision=3,
+        ... ):
+        ...     print(df)
+        shape: (3, 1)
+        ┌───────────────┐
+        │             v │
+        │           --- │
+        │           f64 │
+        ╞═══════════════╡
+        │     9.876,543 │
+        │ 1.010.101,000 │
+        │  -123.456,780 │
+        └───────────────┘
+        """
+        if isinstance(separator, str) and len(separator) != 1:
+            msg = f"`separator` must be a single character; found {separator!r}"
+            raise ValueError(msg)
+        plr.set_decimal_separator(sep=separator)
+        return cls
+
+    @classmethod
+    def set_thousands_separator(
+        cls, separator: str | bool | None = None
+    ) -> type[Config]:
+        """
+        Set the thousands grouping separator character.
+
+        Parameters
+        ----------
+        separator : str, bool
+            Set True to use the default "," (thousands) and "." (decimal) separators.
+            Can also set a custom char, or set ``None`` to omit the separator.
+
+        See Also
+        --------
+        set_decimal_separator : Set the decimal separator character.
+
+        Examples
+        --------
+        >>> df = pl.DataFrame(
+        ...     {
+        ...         "x": [1234567, -987654, 10101],
+        ...         "y": [1234.5, 100000.0, -7654321.25],
+        ...     }
+        ... )
+        >>> with pl.Config(
+        ...     tbl_cell_numeric_alignment="RIGHT",
+        ...     thousands_separator=True,
+        ...     float_precision=2,
+        ... ):
+        ...     print(df)
+        shape: (3, 2)
+        ┌───────────┬───────────────┐
+        │         x ┆             y │
+        │       --- ┆           --- │
+        │       i64 ┆           f64 │
+        ╞═══════════╪═══════════════╡
+        │ 1,234,567 ┆      1,234.50 │
+        │  -987,654 ┆    100,000.00 │
+        │    10,101 ┆ -7,654,321.25 │
+        └───────────┴───────────────┘
+        >>> with pl.Config(
+        ...     tbl_cell_numeric_alignment="RIGHT",
+        ...     thousands_separator=".",
+        ...     decimal_separator=",",
+        ...     float_precision=2,
+        ... ):
+        ...     print(df)
+        shape: (3, 2)
+        ┌───────────┬───────────────┐
+        │         x ┆             y │
+        │       --- ┆           --- │
+        │       i64 ┆           f64 │
+        ╞═══════════╪═══════════════╡
+        │ 1.234.567 ┆      1.234,50 │
+        │  -987.654 ┆    100.000,00 │
+        │    10.101 ┆ -7.654.321,25 │
+        └───────────┴───────────────┘
+        """
+        if separator is True:
+            plr.set_decimal_separator(sep=".")
+            plr.set_thousands_separator(sep=",")
+        else:
+            if isinstance(separator, str) and len(separator) > 1:
+                msg = f"`separator` must be a single character; found {separator!r}"
+                raise ValueError(msg)
+            plr.set_thousands_separator(sep=separator or None)
+        return cls
+
+    @classmethod
+    def set_float_precision(cls, precision: int | None = None) -> type[Config]:
+        """
+        Control the number of decimal places displayed for floating point values.
+
+        Parameters
+        ----------
+        precision : int
+            Number of decimal places to display; set to `None` to revert to the
+            default/standard behaviour.
+
+        Notes
+        -----
+        When setting this to a larger value you should ensure that you are aware of both
+        the limitations of floating point representations, and of the precision of the
+        data that you are looking at.
+
+        This setting only applies to Float32 and Float64 dtypes; it does not cover
+        Decimal dtype values (which are displayed at their native level of precision).
+
+        Examples
+        --------
+        Set a large maximum float precision:
+
+        >>> from math import pi, e
+        >>> df = pl.DataFrame({"const": ["pi", "e"], "value": [pi, e]})
+        >>> with pl.Config(float_precision=15):
+        ...     print(df)
+        shape: (2, 2)
+        ┌───────┬───────────────────┐
+        │ const ┆ value             │
+        │ ---   ┆ ---               │
+        │ str   ┆ f64               │
+        ╞═══════╪═══════════════════╡
+        │ pi    ┆ 3.141592653589793 │
+        │ e     ┆ 2.718281828459045 │
+        └───────┴───────────────────┘
+
+        Set a fixed float precision and align numeric columns to the
+        right in order to cleanly line-up the decimal separator:
+
+        >>> df = pl.DataFrame(
+        ...     {
+        ...         "a": ["xx", "yy"],
+        ...         "b": [-11111111, 44444444444],
+        ...         "c": [100000.987654321, -23456789],
+        ...     }
+        ... )
+        >>> with pl.Config(
+        ...     tbl_cell_numeric_alignment="RIGHT",
+        ...     thousands_separator=",",
+        ...     float_precision=3,
+        ... ):
+        ...     print(df)
+        shape: (2, 3)
+        ┌─────┬────────────────┬─────────────────┐
+        │ a   ┆              b ┆               c │
+        │ --- ┆            --- ┆             --- │
+        │ str ┆            i64 ┆             f64 │
+        ╞═════╪════════════════╪═════════════════╡
+        │ xx  ┆    -11,111,111 ┆     100,000.988 │
+        │ yy  ┆ 44,444,444,444 ┆ -23,456,789.000 │
+        └─────┴────────────────┴─────────────────┘
+        """
+        plr.set_float_precision(precision)
+        return cls
+
+    @classmethod
+    def set_fmt_float(cls, fmt: FloatFmt | None = "mixed") -> type[Config]:
+        """
+        Control how floating point values are displayed.
+
+        Parameters
+        ----------
+        fmt : {"mixed", "full"}
+            How to format floating point numbers:
+
+            - "mixed": Limit the number of decimal places and use scientific
+              notation for large/small values.
+            - "full": Print the full precision of the floating point number.
+
+        Examples
+        --------
+        "mixed" float formatting:
+
+        >>> s = pl.Series([1.2304980958725870923, 1e6, 1e-8])
+        >>> with pl.Config(set_fmt_float="mixed"):
+        ...     print(s)
+        shape: (3,)
+        Series: '' [f64]
+        [
+            1.230498
+            1e6
+            1.0000e-8
+        ]
+
+        "full" float formatting:
+
+        >>> with pl.Config(set_fmt_float="full"):
+        ...     print(s)
+        shape: (3,)
+        Series: '' [f64]
+        [
+            1.230498095872587
+            1000000
+            0.00000001
+        ]
+        """
+        plr.set_float_fmt(fmt="mixed" if fmt is None else fmt)
+        return cls
+
+
+
+
+
+class DisplayTableConfig:
+    """Nested config for displaying tables."""
+
+    def __init__(self):
+        pass
+
+
+class DisplayConfig:
+    """Parameters supported by the polars DisplayConfig."""
+
+    def __init__(self, parent_config: 'Config'):
+        self._config = parent_config
+        self.numeric = DisplayNumericConfig(parent_config)
+        self.table = DisplayTableConfig(parent_config)
+
+
 class Config(contextlib.ContextDecorator):
     """
     Configure polars; offers options for table formatting and more.
