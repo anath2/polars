@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import sys
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -32,6 +33,7 @@ def register_plugin_function(
     cast_to_supertype: bool = False,
     input_wildcard_expansion: bool = False,
     pass_name_to_apply: bool = False,
+    use_relpath: bool = False,
 ) -> Expr:
     """
     Register a plugin function.
@@ -69,6 +71,9 @@ def register_plugin_function(
     pass_name_to_apply
         If set to `True`, the `Series` passed to the function in a group-by operation
         will ensure the name is set. This is an extra heap allocation per group.
+    use_relpath
+        If set to `True`, the path to the dynamic library file will be resolved relative
+        to the virtual environment.
 
     Returns
     -------
@@ -84,7 +89,7 @@ def register_plugin_function(
     """
     pyexprs = parse_into_list_of_expressions(args)
     serialized_kwargs = _serialize_kwargs(kwargs)
-    plugin_path = _resolve_plugin_path(plugin_path)
+    plugin_path = _resolve_plugin_path(plugin_path, use_relpath=use_relpath)
 
     return wrap_expr(
         plr.register_plugin_function(
@@ -115,20 +120,29 @@ def _serialize_kwargs(kwargs: dict[str, Any] | None) -> bytes:
 
 
 @lru_cache(maxsize=16)
-def _resolve_plugin_path(path: Path | str) -> Path:
+def _resolve_plugin_path(path: Path | str, *, use_relpath: bool = False) -> Path:
     """Get the file path of the dynamic library file."""
     if not isinstance(path, Path):
         path = Path(path)
 
     if path.is_file():
-        return path.resolve()
+        return _resolve_file_path(path, use_relpath=use_relpath)
 
     for p in path.iterdir():
         if _is_dynamic_lib(p):
-            return p.resolve()
+            return _resolve_file_path(p, use_relpath=use_relpath)
+
+    msg = f"no dynamic library found at path: {path}"
+    raise FileNotFoundError(msg)
+
+
+def _resolve_file_path(path: Path, *, use_relpath: bool = False) -> Path:
+    venv_path = Path(sys.prefix)
+
+    if use_relpath:
+        return path.relative_to(venv_path)
     else:
-        msg = f"no dynamic library found at path: {path}"
-        raise FileNotFoundError(msg)
+        return path.resolve()
 
 
 def _is_dynamic_lib(path: Path) -> bool:
