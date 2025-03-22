@@ -160,6 +160,12 @@ where
         self
     }
 
+    /// Set append mode
+    pub fn with_append(mut self, append: bool) -> Self {
+        self.options.append = append;
+        self
+    }
+
     pub fn n_threads(mut self, n_threads: usize) -> Self {
         self.n_threads = n_threads;
         self
