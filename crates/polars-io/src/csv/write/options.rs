@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct CsvWriterOptions {
+    pub append: bool,
     pub include_bom: bool,
     pub include_header: bool,
     pub batch_size: NonZeroUsize,
@@ -16,6 +17,7 @@ pub struct CsvWriterOptions {
 impl Default for CsvWriterOptions {
     fn default() -> Self {
         Self {
+            append: false,
             include_bom: false,
             include_header: true,
             batch_size: NonZeroUsize::new(1024).unwrap(),

@@ -3,8 +3,8 @@ use std::num::NonZeroUsize;
 
 use polars_core::POOL;
 use polars_core::frame::DataFrame;
-use polars_core::schema::Schema;
-use polars_error::PolarsResult;
+use polars_core::schema::{Schema, SchemaExt};
+use polars_error::{PolarsResult, polars_ensure};
 
 use super::write_impl::{write, write_bom, write_header};
 use super::{QuoteStyle, SerializeOptions};
@@ -20,6 +20,7 @@ pub struct CsvWriter<W: Write> {
     options: SerializeOptions,
     header: bool,
     bom: bool,
+    append_mode: bool,
     batch_size: NonZeroUsize,
     n_threads: usize,
 }
@@ -40,6 +41,7 @@ where
             options,
             header: true,
             bom: false,
+            append_mode: false,
             batch_size: NonZeroUsize::new(1024).unwrap(),
             n_threads: POOL.current_num_threads(),
         }
@@ -80,6 +82,12 @@ where
     /// Set whether to write headers.
     pub fn include_header(mut self, include_header: bool) -> Self {
         self.header = include_header;
+        self
+    }
+
+    /// Set whether to append to existing file
+    pub fn append_mode(mut self, append_mode: bool) -> Self {
+        self.append_mode = append_mode;
         self
     }
 
@@ -168,6 +176,7 @@ where
     pub fn batched(self, schema: &Schema) -> PolarsResult<BatchedWriter<W>> {
         let expects_bom = self.bom;
         let expects_header = self.header;
+
         Ok(BatchedWriter {
             writer: self,
             has_written_bom: !expects_bom,
@@ -190,6 +199,16 @@ impl<W: Write> BatchedWriter<W> {
     /// # Panics
     /// The caller must ensure the chunks in the given [`DataFrame`] are aligned.
     pub fn write_batch(&mut self, df: &DataFrame) -> PolarsResult<()> {
+        if self.writer.append_mode && self.has_written_header {
+            let df_schema: &Schema = df.schema();
+            polars_ensure!(
+                schemas_match(&self.schema, df_schema),
+                ComputeError: "Schema mismatch. Expect: {:?}, Got: {:?}",
+                self.schema,
+                df_schema
+            );
+        }
+
         if !self.has_written_bom {
             self.has_written_bom = true;
             write_bom(&mut self.writer.buffer)?;
@@ -238,4 +257,21 @@ impl<W: Write> BatchedWriter<W> {
 
         Ok(())
     }
+}
+
+/// Helper function to check if two schemas match.
+fn schemas_match(schema: &Schema, other: &Schema) -> bool {
+    if schema.len() != other.len() {
+        return false;
+    }
+
+    for (expected_field, other_field) in schema.iter_fields().zip(other.iter_fields()) {
+        if expected_field.name() != other_field.name()
+            || expected_field.dtype() != other_field.dtype()
+        {
+            return false;
+        }
+    }
+
+    true
 }

@@ -32,6 +32,7 @@ pub(crate) fn write<W: Write>(
             },
             _ => false,
         };
+
         polars_ensure!(
             !nested,
             ComputeError: "CSV format does not support nested data",

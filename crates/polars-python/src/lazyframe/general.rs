@@ -840,7 +840,7 @@ impl PyLazyFrame {
 
     #[cfg(all(feature = "streaming", feature = "csv"))]
     #[pyo3(signature = (
-        target, include_bom, include_header, separator, line_terminator, quote_char, batch_size,
+        target, append, include_bom, include_header, separator, line_terminator, quote_char, batch_size,
         datetime_format, date_format, time_format, float_scientific, float_precision, null_value,
         quote_style, cloud_options, credential_provider, retries, sink_options
     ))]
@@ -848,6 +848,7 @@ impl PyLazyFrame {
         &self,
         py: Python,
         target: SinkTarget,
+        append: bool,
         include_bom: bool,
         include_header: bool,
         separator: u8,
@@ -883,6 +884,7 @@ impl PyLazyFrame {
         };
 
         let options = CsvWriterOptions {
+            append,
             include_bom,
             include_header,
             batch_size,
