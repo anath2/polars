@@ -20,6 +20,7 @@ pub struct CsvWriter<W: Write> {
     options: SerializeOptions,
     header: bool,
     bom: bool,
+    append: bool,
     batch_size: NonZeroUsize,
     n_threads: usize,
 }
@@ -40,6 +41,7 @@ where
             options,
             header: true,
             bom: false,
+            append: false,
             batch_size: NonZeroUsize::new(1024).unwrap(),
             n_threads: POOL.current_num_threads(),
         }
@@ -161,9 +163,15 @@ where
     }
 
     /// Set append mode
-    pub fn with_append(mut self, append: bool) -> Self {
+    /// Headers are not allowed in append mode
+    pub fn with_append(mut self, append: bool) -> PolarsResult<Self> {
+        if append && self.header {
+            return Err(PolarsError::ComputeError(
+                "Cannot append to a file with headers".to_string(),
+            ));
+        }
         self.options.append = append;
-        self
+        Ok(self)
     }
 
     pub fn n_threads(mut self, n_threads: usize) -> Self {
@@ -196,6 +204,19 @@ impl<W: Write> BatchedWriter<W> {
     /// # Panics
     /// The caller must ensure the chunks in the given [`DataFrame`] are aligned.
     pub fn write_batch(&mut self, df: &DataFrame) -> PolarsResult<()> {
+        if self.writer.options.append & self.has_written_header {
+            let df_schema = df.schema();
+            if !schemas_match(&self.schema, &df_schema) {
+                return Err(PolarsError::ComputeError(
+                    format!(
+                        "Schema mismatch. Expect: {:?}, Got: {:?}",
+                        self.schema,
+                        df_schema
+                    )
+                ));
+            }
+        }
+
         if !self.has_written_bom {
             self.has_written_bom = true;
             write_bom(&mut self.writer.buffer)?;
@@ -244,4 +265,20 @@ impl<W: Write> BatchedWriter<W> {
 
         Ok(())
     }
+}
+
+/// Helper function to check if two schemas match.
+fn schemas_match(schema: &Schema, other: &Schema) -> bool {
+    if schema.len() != other.len() {
+        return false;
+    }
+
+    for (expected_field, other_field) in schema.iter_fields().zip(other.iter_fields()) {
+        if expected_field.name() != other_field.name() || expected_field.data_type() != other_field.data_type() {
+            return false;
+        }
+
+   }
+
+    true
 }

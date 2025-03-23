@@ -50,6 +50,8 @@ pub struct SerializeOptions {
     pub line_terminator: String,
     /// When to insert quotes.
     pub quote_style: QuoteStyle,
+    /// Whether to append to a file instead of overwriting it.
+    pub append: bool,
 }
 
 impl Default for SerializeOptions {
@@ -65,6 +67,7 @@ impl Default for SerializeOptions {
             null: String::new(),
             line_terminator: "\n".into(),
             quote_style: Default::default(),
+            append: false,
         }
     }
 }

@@ -19,23 +19,26 @@ pub(crate) fn write<W: Write>(
     options: &SerializeOptions,
     n_threads: usize,
 ) -> PolarsResult<()> {
-    for s in df.get_columns() {
-        let nested = match s.dtype() {
-            DataType::List(_) => true,
-            #[cfg(feature = "dtype-struct")]
-            DataType::Struct(_) => true,
-            #[cfg(feature = "object")]
-            DataType::Object(_) => {
-                return Err(PolarsError::ComputeError(
-                    "csv writer does not support object dtype".into(),
-                ));
-            },
-            _ => false,
-        };
-        polars_ensure!(
-            !nested,
-            ComputeError: "CSV format does not support nested data",
-        );
+    // Assumes that the schema check has already been done when appending
+    if !options.append {
+        for s in df.get_columns() {
+            let nested = match s.dtype() {
+                DataType::List(_) => true,
+                #[cfg(feature = "dtype-struct")]
+                DataType::Struct(_) => true,
+                #[cfg(feature = "object")]
+                DataType::Object(_) => {
+                    return Err(PolarsError::ComputeError(
+                        "csv writer does not support object dtype".into(),
+                    ));
+                },
+                _ => false,
+            };
+            polars_ensure!(
+                !nested,
+                ComputeError: "CSV format does not support nested data",
+            );
+        }
     }
 
     // Check that the double quote is valid UTF-8.
