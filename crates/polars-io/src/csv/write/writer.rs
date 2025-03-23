@@ -3,8 +3,8 @@ use std::num::NonZeroUsize;
 
 use polars_core::POOL;
 use polars_core::frame::DataFrame;
-use polars_core::schema::Schema;
-use polars_error::PolarsResult;
+use polars_core::schema::{Schema, SchemaExt};
+use polars_error::{PolarsResult, polars_ensure};
 
 use super::write_impl::{write, write_bom, write_header};
 use super::{QuoteStyle, SerializeOptions};
@@ -165,12 +165,10 @@ where
     /// Set append mode
     /// Headers are not allowed in append mode
     pub fn with_append(mut self, append: bool) -> PolarsResult<Self> {
-        if append && self.header {
-            return Err(PolarsError::ComputeError(
-                "Cannot append to a file with headers".to_string(),
-            ));
-        }
-        self.options.append = append;
+        polars_ensure!(!append || !self.header, 
+            ComputeError: "Cannot append to a file with headers");
+        
+        self.append = append;
         Ok(self)
     }
 
@@ -204,17 +202,14 @@ impl<W: Write> BatchedWriter<W> {
     /// # Panics
     /// The caller must ensure the chunks in the given [`DataFrame`] are aligned.
     pub fn write_batch(&mut self, df: &DataFrame) -> PolarsResult<()> {
-        if self.writer.options.append & self.has_written_header {
+        if self.writer.append && self.has_written_header {
             let df_schema = df.schema();
-            if !schemas_match(&self.schema, &df_schema) {
-                return Err(PolarsError::ComputeError(
-                    format!(
-                        "Schema mismatch. Expect: {:?}, Got: {:?}",
-                        self.schema,
-                        df_schema
-                    )
-                ));
-            }
+            polars_ensure!(
+                schemas_match(&self.schema, &df_schema),
+                ComputeError: "Schema mismatch. Expect: {:?}, Got: {:?}",
+                self.schema,
+                df_schema
+            );
         }
 
         if !self.has_written_bom {
@@ -274,7 +269,7 @@ fn schemas_match(schema: &Schema, other: &Schema) -> bool {
     }
 
     for (expected_field, other_field) in schema.iter_fields().zip(other.iter_fields()) {
-        if expected_field.name() != other_field.name() || expected_field.data_type() != other_field.data_type() {
+        if expected_field.name() != other_field.name() || expected_field.dtype() != other_field.dtype() {
             return false;
         }
 

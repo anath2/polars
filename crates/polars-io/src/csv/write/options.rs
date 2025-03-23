@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct CsvWriterOptions {
+    pub append: bool,
     pub include_bom: bool,
     pub include_header: bool,
     pub batch_size: NonZeroUsize,
@@ -16,6 +17,7 @@ pub struct CsvWriterOptions {
 impl Default for CsvWriterOptions {
     fn default() -> Self {
         Self {
+            append: false,
             include_bom: false,
             include_header: true,
             batch_size: NonZeroUsize::new(1024).unwrap(),
@@ -50,8 +52,6 @@ pub struct SerializeOptions {
     pub line_terminator: String,
     /// When to insert quotes.
     pub quote_style: QuoteStyle,
-    /// Whether to append to a file instead of overwriting it.
-    pub append: bool,
 }
 
 impl Default for SerializeOptions {
@@ -67,7 +67,6 @@ impl Default for SerializeOptions {
             null: String::new(),
             line_terminator: "\n".into(),
             quote_style: Default::default(),
-            append: false,
         }
     }
 }
